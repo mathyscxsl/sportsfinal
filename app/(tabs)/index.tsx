@@ -1,98 +1,142 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Button, Card, CardContent, CardHeader, Badge, SafeAreaView } from '@/components/ui';
+import { useThemeColors } from '@/hooks/useThemeColors';
+import { Spacing, Layout } from '@/constants/Spacing';
+import { TextStyles } from '@/constants/Typography';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function Dashboard() {
+    const colors = useThemeColors();
+    const router = useRouter();
 
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    return (
+        <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* Header */}
+                <View style={styles.header}>
+                    <Text style={[TextStyles.h1, { color: colors.text }]}>Accueil</Text>
+                    <Text style={[TextStyles.body, { color: colors.textSecondary, marginTop: Spacing.xs }]}>
+                        Bienvenue dans votre app de sport
+                    </Text>
+                </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+                {/* Quick Stats */}
+                <View style={styles.statsRow}>
+                    <Card variant="filled" style={styles.statCard}>
+                        <CardContent style={styles.statContent}>
+                            <Text style={[TextStyles.h2, { color: colors.primary }]}>0</Text>
+                            <Text style={[TextStyles.bodySmall, { color: colors.textSecondary }]}>
+                                Programmes
+                            </Text>
+                        </CardContent>
+                    </Card>
+                    <Card variant="filled" style={styles.statCard}>
+                        <CardContent style={styles.statContent}>
+                            <Text style={[TextStyles.h2, { color: colors.secondary }]}>0</Text>
+                            <Text style={[TextStyles.bodySmall, { color: colors.textSecondary }]}>
+                                Séances
+                            </Text>
+                        </CardContent>
+                    </Card>
+                </View>
+
+                {/* Design System Demo */}
+                <Card variant="elevated" style={{ marginTop: Spacing.md }}>
+                    <CardHeader>
+                        <View style={styles.cardHeaderRow}>
+                            <Text style={[TextStyles.h4, { color: colors.text }]}>
+                                🎨 Design System
+                            </Text>
+                            <Badge variant="info" size="sm">Nouveau</Badge>
+                        </View>
+                    </CardHeader>
+                    <CardContent>
+                        <Text style={[TextStyles.body, { color: colors.textSecondary }]}>
+                            Découvrez tous les composants UI disponibles pour créer vos écrans
+                        </Text>
+                        <Button
+                            variant="primary"
+                            onPress={() => router.push('/design-system-demo')}
+                            style={{ marginTop: Spacing.md }}
+                            fullWidth
+                        >
+                            Voir la démo
+                        </Button>
+                    </CardContent>
+                </Card>
+
+                {/* Exercices */}
+                <Card variant="elevated" style={{ marginTop: Spacing.md }}>
+                    <CardHeader>
+                        <Text style={[TextStyles.h4, { color: colors.text }]}>
+                            💪 Exercices
+                        </Text>
+                    </CardHeader>
+                    <CardContent>
+                        <Text style={[TextStyles.body, { color: colors.textSecondary, marginBottom: Spacing.md }]}>
+                            Gérez votre bibliothèque d&#39;exercices personnalisés
+                        </Text>
+                        <View style={styles.buttonGroup}>
+                            <Button
+                                variant="outline"
+                                onPress={() => router.push('/exercise/list')}
+                                fullWidth
+                            >
+                                📋 Liste des exercices
+                            </Button>
+                            <Button
+                                variant="secondary"
+                                onPress={() => router.push('/exercise/create')}
+                                style={{ marginTop: Spacing.sm }}
+                                fullWidth
+                            >
+                                ➕ Créer un exercice
+                            </Button>
+                        </View>
+                    </CardContent>
+                </Card>
+
+                {/* Spacer bottom */}
+                <View style={{ height: Spacing.xl }} />
+            </ScrollView>
+        </SafeAreaView>
+    );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
+    container: {
+        flex: 1,
+    },
+    scrollView: {
+        flex: 1,
+    },
+    scrollContent: {
+        padding: Layout.screenPadding,
+    },
+    header: {
+        marginBottom: Spacing.lg,
+    },
+    statsRow: {
+        flexDirection: 'row',
+        gap: Spacing.md,
+    },
+    statCard: {
+        flex: 1,
+    },
+    statContent: {
+        alignItems: 'center',
+        padding: Spacing.sm,
+    },
+    cardHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    buttonGroup: {
+        width: '100%',
+    },
 });
