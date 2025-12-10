@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { DB_FILE_NAME, migrations } from './migrations';
+import { runSeeder } from './seeder';
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -47,6 +48,9 @@ export const initDatabase = async (): Promise<SQLite.SQLiteDatabase> => {
   `);
 
     await applyMigrations(db);
+
+    // Seed default data (exercises etc.)
+    await runSeeder(db);
 
     return db;
 };
