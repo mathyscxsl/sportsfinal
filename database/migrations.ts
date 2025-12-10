@@ -143,5 +143,34 @@ const initialSchema: Migration = {
 	]
 };
 
-export const migrations: Migration[] = [initialSchema];
+const addProgramSessionsJunctionTable: Migration = {
+	id: 2,
+	name: 'add_program_sessions_junction_table',
+	statements: [
+		`CREATE TABLE IF NOT EXISTS program_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			program_id INTEGER NOT NULL,
+			session_id INTEGER NOT NULL,
+			order_index INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+			FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE CASCADE ON UPDATE CASCADE,
+			FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE ON UPDATE CASCADE
+		);`,
+		`CREATE INDEX IF NOT EXISTS idx_program_sessions_program_id ON program_sessions(program_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_program_sessions_session_id ON program_sessions(session_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_program_sessions_order ON program_sessions(program_id, order_index);`,
+
+		// Migrer les données existantes: si une session a un program_id, créer l'entrée dans la table de jonction
+		`INSERT INTO program_sessions (program_id, session_id, order_index, created_at)
+		SELECT program_id, id, 0, created_at
+		FROM sessions
+		WHERE program_id IS NOT NULL;`,
+
+		// Optionnel: On pourrait supprimer la colonne program_id de sessions, mais pour éviter de casser le code existant,
+		// on la garde pour l'instant et on la met à NULL
+		`UPDATE sessions SET program_id = NULL WHERE program_id IS NOT NULL;`
+	]
+};
+
+export const migrations: Migration[] = [initialSchema, addProgramSessionsJunctionTable];
 

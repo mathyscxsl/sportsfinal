@@ -1,31 +1,17 @@
 import type { SelectOption } from "@/components/ui";
-import {
-  Button,
-  Card,
-  CardContent,
-  Input,
-  SafeAreaView,
-  Select,
-} from "@/components/ui";
+import {Button, Card, CardContent, Input, SafeAreaView, Select,} from "@/components/ui";
 import { Layout, Spacing } from "@/constants/Spacing";
 import { TextStyles } from "@/constants/Typography";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { exerciseRepository } from "@/services/repositories/ExerciseRepository";
 import { sessionExerciseRepository } from "@/services/repositories/SessionExerciseRepository";
 import { sessionRepository } from "@/services/repositories/SessionRepository";
+import { programSessionRepository } from "@/services/repositories/ProgramSessionRepository";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import type { Exercise, ExerciseCategory } from "@/types/exercise.type";
-import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useEffect, useState } from "react";
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import {Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as yup from "yup";
 
 // Schéma de validation Yup
@@ -62,6 +48,7 @@ type SessionExerciseForm = {
 
 export default function CreateSession() {
   const router = useRouter();
+  const { programId } = useLocalSearchParams<{ programId?: string }>();
   const colors = useThemeColors();
   const [loading, setLoading] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -99,7 +86,6 @@ export default function CreateSession() {
 
     setLoading(true);
     try {
-      // Créer la session
       const session = await sessionRepository.create({
         name: values.name.trim(),
         type: values.type,
@@ -111,7 +97,6 @@ export default function CreateSession() {
         await sessionExerciseRepository.create({
           sessionId: session.id,
           exerciseId: exercise.exerciseId ?? undefined,
-          // customName n'est plus utilisé car l'exercice est toujours créé en BDD
           orderIndex: exercise.orderIndex,
           sets: exercise.sets,
           targetReps: exercise.targetReps,
@@ -124,10 +109,25 @@ export default function CreateSession() {
         });
       }
 
-      Alert.alert("✅ Succès", "Séance créée avec succès", [
+      // Si un programId est fourni, ajouter la séance au programme via la table de jonction
+      if (programId) {
+        await programSessionRepository.addSessionToProgram(parseInt(programId), session.id);
+      }
+
+      const successMessage = programId
+        ? "Séance créée et ajoutée au programme avec succès"
+        : "Séance créée avec succès";
+
+      Alert.alert("✅ Succès", successMessage, [
         {
           text: "OK",
-          onPress: () => router.back(),
+          onPress: () => {
+            if (programId) {
+              router.replace(`/program/${programId}`);
+            } else {
+              router.back();
+            }
+          },
         },
       ]);
     } catch (err) {
@@ -205,8 +205,24 @@ export default function CreateSession() {
                 { color: colors.textSecondary, marginTop: Spacing.xs },
               ]}
             >
-              Créez une séance d'entraînement personnalisée
+              {programId
+                ? "Créez une séance pour votre programme"
+                : "Créez une séance d'entraînement personnalisée"}
             </Text>
+            {programId && (
+              <View
+                style={[
+                  styles.programBadge,
+                  { backgroundColor: colors.primary + "20" },
+                ]}
+              >
+                <Text
+                  style={[TextStyles.caption, { color: colors.primary }]}
+                >
+                  📋 Sera ajoutée au programme
+                </Text>
+              </View>
+            )}
           </View>
 
           <Formik
@@ -705,6 +721,13 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: Spacing.lg,
+  },
+  programBadge: {
+    marginTop: Spacing.sm,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: 8,
+    alignSelf: "flex-start",
   },
   typeDescription: {
     marginTop: Spacing.sm,
