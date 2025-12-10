@@ -91,6 +91,42 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Programmes */}
+        <Card variant="elevated" style={{ marginTop: Spacing.md }}>
+          <CardHeader>
+            <Text style={[TextStyles.h4, { color: colors.text }]}>
+              📋 Programmes
+            </Text>
+          </CardHeader>
+          <CardContent>
+            <Text
+              style={[
+                TextStyles.body,
+                { color: colors.textSecondary, marginBottom: Spacing.md },
+              ]}
+            >
+              Organisez vos séances en programmes d&#39;entraînement
+            </Text>
+            <View style={styles.buttonGroup}>
+              <Button
+                variant="outline"
+                onPress={() => router.push("/program/list")}
+                fullWidth
+              >
+                📋 Liste des programmes
+              </Button>
+              <Button
+                variant="secondary"
+                onPress={() => router.push("/program/create")}
+                style={{ marginTop: Spacing.sm }}
+                fullWidth
+              >
+                ➕ Créer un programme
+              </Button>
+            </View>
+          </CardContent>
+        </Card>
+
         {/* Exercices */}
         <Card variant="elevated" style={{ marginTop: Spacing.md }}>
           <CardHeader>
