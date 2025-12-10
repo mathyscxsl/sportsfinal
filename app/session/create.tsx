@@ -13,7 +13,7 @@ import { useThemeColors } from "@/hooks/useThemeColors";
 import { exerciseRepository } from "@/services/repositories/ExerciseRepository";
 import { sessionExerciseRepository } from "@/services/repositories/SessionExerciseRepository";
 import { sessionRepository } from "@/services/repositories/SessionRepository";
-import type { Exercise } from "@/types/exercise.type";
+import type { Exercise, ExerciseCategory } from "@/types/exercise.type";
 import { useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useEffect, useState } from "react";
@@ -111,7 +111,7 @@ export default function CreateSession() {
         await sessionExerciseRepository.create({
           sessionId: session.id,
           exerciseId: exercise.exerciseId ?? undefined,
-          customName: exercise.customName || undefined,
+          // customName n'est plus utilisé car l'exercice est toujours créé en BDD
           orderIndex: exercise.orderIndex,
           sets: exercise.sets,
           targetReps: exercise.targetReps,
@@ -175,7 +175,6 @@ export default function CreateSession() {
   };
 
   const getExerciseName = (ex: SessionExerciseForm): string => {
-    if (ex.customName) return ex.customName;
     const exercise = exercises.find((e) => e.id === ex.exerciseId);
     return exercise?.name || "Exercice inconnu";
   };
@@ -447,6 +446,7 @@ export default function CreateSession() {
           exercises={exercises}
           onAdd={addExercise}
           onCancel={() => setShowExerciseForm(false)}
+          onExerciseCreated={loadExercises}
         />
       )}
     </SafeAreaView>
@@ -458,24 +458,37 @@ function ExerciseFormModal({
   exercises,
   onAdd,
   onCancel,
+  onExerciseCreated,
 }: {
   exercises: Exercise[];
   onAdd: (exercise: SessionExerciseForm) => void;
   onCancel: () => void;
+  onExerciseCreated?: () => void;
 }) {
   const colors = useThemeColors();
   const [exerciseId, setExerciseId] = useState<number | null>(null);
   const [customName, setCustomName] = useState("");
+  const [category, setCategory] = useState<ExerciseCategory | "">("");
+  const [description, setDescription] = useState("");
   const [sets, setSets] = useState("3");
   const [targetReps, setTargetReps] = useState("10");
   const [restSeconds, setRestSeconds] = useState("60");
+  const [loading, setLoading] = useState(false);
 
   const exerciseOptions: SelectOption[] = [
     { label: "Exercice personnalisé", value: "0" },
     ...exercises.map((e) => ({ label: e.name, value: e.id.toString() })),
   ];
 
-  const handleAdd = () => {
+  const categories: SelectOption[] = [
+    { label: "Aucune", value: "" },
+    { label: "Cardio", value: "cardio" },
+    { label: "Force", value: "force" },
+    { label: "Mobilité", value: "mobilité" },
+    { label: "Autre", value: "autre" },
+  ];
+
+  const handleAdd = async () => {
     if (exerciseId === 0 && !customName.trim()) {
       Alert.alert(
         "⚠️ Attention",
@@ -489,14 +502,46 @@ function ExerciseFormModal({
       return;
     }
 
-    onAdd({
-      exerciseId: exerciseId === 0 ? null : exerciseId,
-      customName: exerciseId === 0 ? customName : "",
-      orderIndex: 0,
-      sets: sets ? parseInt(sets) : undefined,
-      targetReps: targetReps ? parseInt(targetReps) : undefined,
-      restSecondsBetweenSets: restSeconds ? parseInt(restSeconds) : undefined,
-    });
+    try {
+      setLoading(true);
+
+      let finalExerciseId = exerciseId === 0 ? null : exerciseId;
+
+      // Si c'est un exercice personnalisé, le créer en base de données
+      if (exerciseId === 0 && customName.trim()) {
+        const newExercise = await exerciseRepository.create({
+          name: customName.trim(),
+          category: category || null,
+          description: description.trim() || null,
+          isCustom: true,
+        });
+
+        finalExerciseId = newExercise.id;
+
+        // Notifier le parent pour recharger la liste des exercices
+        if (onExerciseCreated) {
+          onExerciseCreated();
+        }
+      }
+
+      onAdd({
+        exerciseId: finalExerciseId,
+        customName: "",
+        orderIndex: 0,
+        sets: sets ? parseInt(sets) : undefined,
+        targetReps: targetReps ? parseInt(targetReps) : undefined,
+        restSecondsBetweenSets: restSeconds ? parseInt(restSeconds) : undefined,
+      });
+    } catch (err) {
+      Alert.alert(
+        "❌ Erreur",
+        err instanceof Error
+          ? err.message
+          : "Erreur lors de la création de l'exercice"
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -524,14 +569,74 @@ function ExerciseFormModal({
         />
 
         {exerciseId === 0 && (
-          <Input
-            label="Nom de l'exercice"
-            placeholder="Ex: Burpees"
-            value={customName}
-            onChangeText={setCustomName}
-            containerStyle={{ marginTop: Spacing.sm }}
-          />
+          <>
+            <Input
+              label="Nom de l'exercice *"
+              placeholder="Ex: Burpees"
+              value={customName}
+              onChangeText={setCustomName}
+              containerStyle={{ marginTop: Spacing.sm }}
+              autoCapitalize="sentences"
+            />
+
+            <Select
+              label="Catégorie"
+              value={category}
+              options={categories}
+              onValueChange={(itemValue) =>
+                setCategory(itemValue as ExerciseCategory | "")
+              }
+              placeholder="Sélectionner une catégorie"
+            />
+            {category && (
+              <View
+                style={{
+                  marginTop: Spacing.sm,
+                  paddingHorizontal: Spacing.sm,
+                  paddingVertical: Spacing.xs,
+                  borderRadius: 12,
+                  backgroundColor: colors.backgroundSecondary,
+                  alignSelf: "flex-start",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.text,
+                    fontSize: 12,
+                    fontWeight: "600",
+                  }}
+                >
+                  {categories.find((c) => c.value === category)?.label}
+                </Text>
+              </View>
+            )}
+
+            <Input
+              label="Description"
+              placeholder="Décrivez l'exercice, les muscles ciblés..."
+              value={description}
+              onChangeText={setDescription}
+              multiline
+              numberOfLines={3}
+              containerStyle={{ marginTop: Spacing.sm }}
+              style={{ height: 80, textAlignVertical: "top" }}
+            />
+          </>
         )}
+
+        {/* Configuration de l'exercice */}
+        <Text
+          style={[
+            TextStyles.label,
+            {
+              color: colors.text,
+              marginTop: Spacing.md,
+              marginBottom: Spacing.sm,
+            },
+          ]}
+        >
+          Configuration
+        </Text>
 
         <View style={styles.formRow}>
           <Input
@@ -562,10 +667,21 @@ function ExerciseFormModal({
         />
 
         <View style={styles.modalButtons}>
-          <Button variant="outline" onPress={onCancel} style={styles.button}>
+          <Button
+            variant="outline"
+            onPress={onCancel}
+            style={styles.button}
+            disabled={loading}
+          >
             Annuler
           </Button>
-          <Button variant="primary" onPress={handleAdd} style={styles.button}>
+          <Button
+            variant="primary"
+            onPress={handleAdd}
+            style={styles.button}
+            loading={loading}
+            disabled={loading}
+          >
             Ajouter
           </Button>
         </View>
