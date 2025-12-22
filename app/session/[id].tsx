@@ -1,9 +1,9 @@
 import {
-  Button,
-  Card,
-  CardContent,
-  LoadingSpinner,
-  SafeAreaView,
+    Button,
+    Card,
+    CardContent,
+    LoadingSpinner,
+    SafeAreaView,
 } from "@/components/ui";
 import { Layout, Spacing } from "@/constants/Spacing";
 import { TextStyles } from "@/constants/Typography";
@@ -360,9 +360,7 @@ export default function SessionDetails() {
           <Button
             variant="primary"
             fullWidth
-            onPress={() => {
-              Alert.alert("test");
-            }}
+            onPress={() => router.push(`/session/${id}/start` as any)}
           >
             ▶️ Démarrer la séance
           </Button>
