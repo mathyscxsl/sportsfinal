@@ -1,17 +1,17 @@
 import type { SelectOption } from "@/components/ui";
-import {Button, Card, CardContent, Input, SafeAreaView, Select,} from "@/components/ui";
+import { Button, Card, CardContent, Input, SafeAreaView, Select, } from "@/components/ui";
 import { Layout, Spacing } from "@/constants/Spacing";
 import { TextStyles } from "@/constants/Typography";
 import { useThemeColors } from "@/hooks/useThemeColors";
 import { exerciseRepository } from "@/services/repositories/ExerciseRepository";
+import { programSessionRepository } from "@/services/repositories/ProgramSessionRepository";
 import { sessionExerciseRepository } from "@/services/repositories/SessionExerciseRepository";
 import { sessionRepository } from "@/services/repositories/SessionRepository";
-import { programSessionRepository } from "@/services/repositories/ProgramSessionRepository";
-import { useRouter, useLocalSearchParams } from "expo-router";
 import type { Exercise, ExerciseCategory } from "@/types/exercise.type";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { Formik } from "formik";
 import { useEffect, useState } from "react";
-import {Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from "react-native";
 import * as yup from "yup";
 
 // Schéma de validation Yup
@@ -30,6 +30,12 @@ const sessionSchema = yup.object({
 type SessionFormValues = {
   name: string;
   type: "AMRAP" | "HIIT" | "EMOM" | "CUSTOM";
+  // Paramètres au niveau de la séance selon le type
+  amrapDurationSeconds?: string;
+  hiitWorkSeconds?: string;
+  hiitRestSeconds?: string;
+  hiitTotalDurationSeconds?: string;
+  emomIntervalSeconds?: string;
 };
 
 type SessionExerciseForm = {
@@ -73,6 +79,11 @@ export default function CreateSession() {
   const initialValues: SessionFormValues = {
     name: "",
     type: "CUSTOM",
+    amrapDurationSeconds: "",
+    hiitWorkSeconds: "",
+    hiitRestSeconds: "",
+    hiitTotalDurationSeconds: "",
+    emomIntervalSeconds: "",
   };
 
   const handleSubmit = async (values: SessionFormValues) => {
@@ -86,10 +97,26 @@ export default function CreateSession() {
 
     setLoading(true);
     try {
+      // Sérialiser la configuration spécifique au type dans repeat_rule (JSON)
+      let repeatRule: string | undefined = undefined;
+      if (values.type === "HIIT") {
+        const work = values.hiitWorkSeconds ? parseInt(values.hiitWorkSeconds) : undefined;
+        const rest = values.hiitRestSeconds ? parseInt(values.hiitRestSeconds) : undefined;
+        const total = values.hiitTotalDurationSeconds ? parseInt(values.hiitTotalDurationSeconds) : undefined;
+        repeatRule = JSON.stringify({ typeConfig: { hiit: { workSeconds: work, restSeconds: rest, totalDurationSeconds: total } } });
+      } else if (values.type === "EMOM") {
+        const interval = values.emomIntervalSeconds ? parseInt(values.emomIntervalSeconds) : undefined;
+        repeatRule = JSON.stringify({ typeConfig: { emom: { intervalSeconds: interval } } });
+      } else if (values.type === "AMRAP") {
+        const duration = values.amrapDurationSeconds ? parseInt(values.amrapDurationSeconds) : undefined;
+        repeatRule = JSON.stringify({ typeConfig: { amrap: { durationSeconds: duration } } });
+      }
+
       const session = await sessionRepository.create({
         name: values.name.trim(),
         type: values.type,
         notificationEnabled: 0,
+        repeatRule,
       });
 
       // Ajouter les exercices à la session
@@ -98,13 +125,15 @@ export default function CreateSession() {
           sessionId: session.id,
           exerciseId: exercise.exerciseId ?? undefined,
           orderIndex: exercise.orderIndex,
-          sets: exercise.sets,
-          targetReps: exercise.targetReps,
-          targetDurationSeconds: exercise.targetDurationSeconds,
-          restSecondsBetweenSets: exercise.restSecondsBetweenSets,
-          workSeconds: exercise.workSeconds,
-          restSeconds: exercise.restSeconds,
-          emomIntervalSeconds: exercise.emomIntervalSeconds,
+          // Pour HIIT/EMOM, on ne renseigne pas les séries ni le repos au niveau exercice
+          sets: values.type === "HIIT" || values.type === 'EMOM' ? undefined : exercise.sets,
+          targetReps: values.type === "HIIT" ? undefined : exercise.targetReps,
+          // AMRAP peut utiliser une durée cible au niveau exercice si souhaité
+          targetDurationSeconds: values.type === "AMRAP" ? exercise.targetDurationSeconds : undefined,
+          restSecondsBetweenSets: values.type === "HIIT" || values.type === 'EMOM' ? undefined : exercise.restSecondsBetweenSets,
+          workSeconds: undefined,
+          restSeconds: undefined,
+          emomIntervalSeconds: values.type === "EMOM" ? exercise.emomIntervalSeconds : undefined,
           notes: exercise.notes,
         });
       }
@@ -123,7 +152,7 @@ export default function CreateSession() {
           text: "OK",
           onPress: () => {
             if (programId) {
-              router.replace(`/program/${programId}`);
+              router.replace(`/program/${programId}` as any);
             } else {
               router.back();
             }
@@ -360,7 +389,7 @@ export default function CreateSession() {
                                 {index + 1}. {getExerciseName(ex)}
                               </Text>
                               <View style={styles.exerciseDetails}>
-                                {ex.sets && (
+                                {values.type === 'CUSTOM' && ex.sets && (
                                   <Text
                                     style={[
                                       TextStyles.caption,
@@ -370,7 +399,7 @@ export default function CreateSession() {
                                     {ex.sets} série{ex.sets > 1 ? "s" : ""}
                                   </Text>
                                 )}
-                                {ex.targetReps && (
+                                {(values.type === 'CUSTOM' || values.type === 'EMOM') && ex.targetReps && (
                                   <Text
                                     style={[
                                       TextStyles.caption,
@@ -380,7 +409,7 @@ export default function CreateSession() {
                                     • {ex.targetReps} reps
                                   </Text>
                                 )}
-                                {ex.targetDurationSeconds && (
+                                {values.type === 'AMRAP' && ex.targetDurationSeconds && (
                                   <Text
                                     style={[
                                       TextStyles.caption,
@@ -427,6 +456,61 @@ export default function CreateSession() {
                   </CardContent>
                 </Card>
 
+                {/* Paramètres du type de séance */}
+                <Card variant="elevated" style={{ marginTop: Spacing.md }}>
+                  <CardContent>
+                    <Text style={[TextStyles.h3, { color: colors.text, marginBottom: Spacing.md }]}>Paramètres du type</Text>
+                    {values.type === 'HIIT' && (
+                      <View>
+                        <View style={styles.formRow}>
+                          <Input
+                            label="Temps de travail (s)"
+                            placeholder="30"
+                            value={values.hiitWorkSeconds}
+                            onChangeText={(t) => setFieldValue('hiitWorkSeconds', t)}
+                            keyboardType="number-pad"
+                            containerStyle={styles.formInput}
+                          />
+                          <Input
+                            label="Temps de repos (s)"
+                            placeholder="30"
+                            value={values.hiitRestSeconds}
+                            onChangeText={(t) => setFieldValue('hiitRestSeconds', t)}
+                            keyboardType="number-pad"
+                            containerStyle={styles.formInput}
+                          />
+                        </View>
+                        <Input
+                          label="Durée totale (s)"
+                          placeholder="600"
+                          value={values.hiitTotalDurationSeconds}
+                          onChangeText={(t) => setFieldValue('hiitTotalDurationSeconds', t)}
+                          keyboardType="number-pad"
+                          containerStyle={{ marginTop: Spacing.sm }}
+                        />
+                      </View>
+                    )}
+                    {values.type === 'EMOM' && (
+                      <Input
+                        label="Intervalle EMOM (s)"
+                        placeholder="60"
+                        value={values.emomIntervalSeconds}
+                        onChangeText={(t) => setFieldValue('emomIntervalSeconds', t)}
+                        keyboardType="number-pad"
+                      />
+                    )}
+                    {values.type === 'AMRAP' && (
+                      <Input
+                        label="Durée AMRAP (s)"
+                        placeholder="600"
+                        value={values.amrapDurationSeconds}
+                        onChangeText={(t) => setFieldValue('amrapDurationSeconds', t)}
+                        keyboardType="number-pad"
+                      />
+                    )}
+                  </CardContent>
+                </Card>
+
                 {/* Buttons */}
                 <View style={styles.buttonGroup}>
                   <Button
@@ -447,6 +531,17 @@ export default function CreateSession() {
                     Créer la séance
                   </Button>
                 </View>
+
+                {/* Modal pour ajouter un exercice (dépend du type de séance) */}
+                {showExerciseForm && (
+                  <ExerciseFormModal
+                    exercises={exercises}
+                    onAdd={addExercise}
+                    onCancel={() => setShowExerciseForm(false)}
+                    onExerciseCreated={loadExercises}
+                    sessionType={values.type}
+                  />
+                )}
               </View>
             )}
           </Formik>
@@ -455,16 +550,6 @@ export default function CreateSession() {
           <View style={{ height: Spacing.xxl }} />
         </ScrollView>
       </KeyboardAvoidingView>
-
-      {/* Modal pour ajouter un exercice */}
-      {showExerciseForm && (
-        <ExerciseFormModal
-          exercises={exercises}
-          onAdd={addExercise}
-          onCancel={() => setShowExerciseForm(false)}
-          onExerciseCreated={loadExercises}
-        />
-      )}
     </SafeAreaView>
   );
 }
@@ -475,11 +560,13 @@ function ExerciseFormModal({
   onAdd,
   onCancel,
   onExerciseCreated,
+  sessionType,
 }: {
   exercises: Exercise[];
   onAdd: (exercise: SessionExerciseForm) => void;
   onCancel: () => void;
   onExerciseCreated?: () => void;
+  sessionType: SessionFormValues['type'];
 }) {
   const colors = useThemeColors();
   const [exerciseId, setExerciseId] = useState<number | null>(null);
@@ -544,9 +631,9 @@ function ExerciseFormModal({
         exerciseId: finalExerciseId,
         customName: "",
         orderIndex: 0,
-        sets: sets ? parseInt(sets) : undefined,
-        targetReps: targetReps ? parseInt(targetReps) : undefined,
-        restSecondsBetweenSets: restSeconds ? parseInt(restSeconds) : undefined,
+        sets: sessionType === 'HIIT' ? undefined : (sets ? parseInt(sets) : undefined),
+        targetReps: sessionType === 'HIIT' ? undefined : (targetReps ? parseInt(targetReps) : undefined),
+        restSecondsBetweenSets: sessionType === 'HIIT' ? undefined : (restSeconds ? parseInt(restSeconds) : undefined),
       });
     } catch (err) {
       Alert.alert(
@@ -653,34 +740,49 @@ function ExerciseFormModal({
         >
           Configuration
         </Text>
+        {sessionType === 'CUSTOM' && (
+          <>
+            <View style={styles.formRow}>
+              <Input
+                label="Séries"
+                placeholder="3"
+                value={sets}
+                onChangeText={setSets}
+                keyboardType="number-pad"
+                containerStyle={styles.formInput}
+              />
+              <Input
+                label="Répétitions"
+                placeholder="10"
+                value={targetReps}
+                onChangeText={setTargetReps}
+                keyboardType="number-pad"
+                containerStyle={styles.formInput}
+              />
+            </View>
 
-        <View style={styles.formRow}>
-          <Input
-            label="Séries"
-            placeholder="3"
-            value={sets}
-            onChangeText={setSets}
-            keyboardType="number-pad"
-            containerStyle={styles.formInput}
-          />
-          <Input
-            label="Répétitions"
-            placeholder="10"
-            value={targetReps}
-            onChangeText={setTargetReps}
-            keyboardType="number-pad"
-            containerStyle={styles.formInput}
-          />
-        </View>
-
-        <Input
-          label="Repos entre séries (secondes)"
-          placeholder="60"
-          value={restSeconds}
-          onChangeText={setRestSeconds}
-          keyboardType="number-pad"
-          containerStyle={{ marginTop: Spacing.sm }}
-        />
+            <Input
+              label="Repos entre séries (secondes)"
+              placeholder="60"
+              value={restSeconds}
+              onChangeText={setRestSeconds}
+              keyboardType="number-pad"
+              containerStyle={{ marginTop: Spacing.sm }}
+            />
+          </>
+        )}
+        {sessionType === 'EMOM' && (
+          <View style={styles.formRow}>
+            <Input
+              label="Répétitions"
+              placeholder="10"
+              value={targetReps}
+              onChangeText={setTargetReps}
+              keyboardType="number-pad"
+              containerStyle={styles.formInput}
+            />
+          </View>
+        )}
 
         <View style={styles.modalButtons}>
           <Button
