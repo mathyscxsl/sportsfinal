@@ -3,6 +3,7 @@ import { sessionRepository } from '@/services/repositories/SessionRepository';
 import { workoutExerciseRepository } from '@/services/repositories/WorkoutExerciseRepository';
 import { workoutRepository } from '@/services/repositories/WorkoutRepository';
 import { workoutSetRepository } from '@/services/repositories/WorkoutSetRepository';
+import Sound from '@/services/sound';
 import { create } from 'zustand';
 
 type ExerciseRuntime = {
@@ -18,8 +19,7 @@ type ExerciseRuntime = {
     restSeconds?: number | null;
     emomIntervalSeconds?: number | null;
     notes?: string | null;
-    // runtime tracking
-    currentSet: number; // starts at 1
+    currentSet: number;
     totalReps: number;
     totalDurationSeconds: number;
 };
@@ -28,19 +28,17 @@ type RunnerStatus = 'idle' | 'running' | 'paused' | 'rest';
 type RunnerMode = 'DEFAULT' | 'HIIT' | 'AMRAP' | 'EMOM';
 
 type SessionRunnerState = {
-    // identifiers
     sessionId?: number;
     workoutId?: number;
     startedAt?: number;
     endedAt?: number;
 
-    // timer
     elapsedSeconds: number;
     restRemainingSeconds?: number | null;
     status: RunnerStatus;
     timerHandle?: any;
 
-    // mode & HIIT runtime
+    // mode & HIIT
     mode: RunnerMode;
     hiitWorkSeconds?: number | null;
     hiitRestSeconds?: number | null;
@@ -54,11 +52,9 @@ type SessionRunnerState = {
     emomIntervalSeconds?: number | null;
     emomRemainingSeconds?: number | null;
 
-    // exercise navigation
     exercises: ExerciseRuntime[];
     currentExerciseIndex: number;
 
-    // actions
     initialize: (sessionId: number) => Promise<void>;
     start: () => void;
     pause: () => void;
@@ -67,7 +63,7 @@ type SessionRunnerState = {
     prevExercise: () => void;
     addRep: (delta?: number) => void;
     completeSet: () => Promise<void>;
-    finish: (notes?: string) => Promise<number | undefined>; // returns workoutId
+    finish: (notes?: string) => Promise<number | undefined>;
     reset: () => void;
 };
 
@@ -94,7 +90,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
     emomRemainingSeconds: null,
 
     initialize: async (sessionId: number) => {
-        // load session exercises and create a workout and workout_exercises
         const sesExercises = await sessionExerciseRepository.findBySessionIdWithExerciseDetails(sessionId);
         const session = await sessionRepository.findById(sessionId);
         const workout = await workoutRepository.create({
@@ -103,6 +98,8 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
             startedAt: Date.now(),
             completed: 0,
         });
+
+
 
         const exercises: ExerciseRuntime[] = [];
 
@@ -134,7 +131,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
             });
         }
 
-        // Detect HIIT config from session.repeatRule JSON
         let mode: RunnerMode = 'DEFAULT';
         let hiitWorkSeconds: number | null = null;
         let hiitRestSeconds: number | null = null;
@@ -215,16 +211,13 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
                         hiitTotalRemainingSeconds: state.hiitTotalRemainingSeconds != null ? Math.max(0, (state.hiitTotalRemainingSeconds - 1)) : null,
                     });
                 } else if (state.status === 'running' && state.phase === 'work' && (!state.phaseRemainingSeconds || state.phaseRemainingSeconds <= 0)) {
-                    // switch to rest
                     set({ phase: 'rest', phaseRemainingSeconds: state.hiitRestSeconds ?? null });
                 } else if (state.status === 'running' && state.phase === 'rest' && state.phaseRemainingSeconds && state.phaseRemainingSeconds > 0) {
                     set({ phaseRemainingSeconds: (state.phaseRemainingSeconds - 1), hiitTotalRemainingSeconds: state.hiitTotalRemainingSeconds != null ? Math.max(0, (state.hiitTotalRemainingSeconds - 1)) : null });
                 } else if (state.status === 'running' && state.phase === 'rest' && (!state.phaseRemainingSeconds || state.phaseRemainingSeconds <= 0)) {
-                    // rest ended -> log set for the exercise and switch to next exercise then back to work
                     const ex = state.exercises[state.currentExerciseIndex];
                     if (ex) {
                         const nextSet = ex.currentSet + 1;
-                        // create a set with duration = hiitWorkSeconds
                         const duration = state.hiitWorkSeconds ?? undefined;
                         workoutSetRepository.create({ workoutExerciseId: ex.workoutExerciseId, setNumber: ex.currentSet, durationSeconds: duration });
                         set((s) => {
@@ -238,7 +231,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
                     }
                 }
 
-                // Auto finish if total remaining reaches 0
                 const now = get();
                 if (now.hiitTotalRemainingSeconds != null && now.hiitTotalRemainingSeconds <= 0) {
                     get().finish();
@@ -254,7 +246,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
                 if (state.status === 'running' && state.emomRemainingSeconds != null && state.emomRemainingSeconds > 0) {
                     set({ emomRemainingSeconds: state.emomRemainingSeconds - 1 });
                 } else if (state.status === 'running' && (state.emomRemainingSeconds == null || state.emomRemainingSeconds <= 0)) {
-                    // New minute starts: log a set for current exercise and rotate to next
                     const st = get();
                     const ex = st.exercises[st.currentExerciseIndex];
                     if (ex) {
@@ -278,13 +269,13 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
                     if (restRemainingSeconds && restRemainingSeconds > 0) {
                         set({ restRemainingSeconds: restRemainingSeconds - 1 });
                     } else {
-                        // end of rest -> back to running
                         set({ status: 'running', restRemainingSeconds: null });
                     }
                 }
             }
         }, 1000);
         set({ status: 'running', timerHandle: handle });
+        Sound.play('test.mp3');
     },
 
     pause: () => {
@@ -311,7 +302,7 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
 
     prevExercise: () => {
         const { currentExerciseIndex, mode } = get();
-        if (mode === 'HIIT' || mode === 'EMOM') return; // back navigation disabled
+        if (mode === 'HIIT' || mode === 'EMOM') return;
         if (currentExerciseIndex > 0) set({ currentExerciseIndex: currentExerciseIndex - 1 });
     },
 
@@ -330,7 +321,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
     completeSet: async () => {
         const state = get();
         if (state.mode === 'HIIT') {
-            // In HIIT, sets are driven automatically per interval; ignore manual complete.
             return;
         }
         const ex = state.exercises[state.currentExerciseIndex];
@@ -347,17 +337,14 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
             endedAt: undefined,
         });
 
-        // prepare next set and maybe rest
         const nextSet = setNumber + 1;
         set((s) => {
             const copy = [...s.exercises];
             copy[s.currentExerciseIndex] = {
                 ...copy[s.currentExerciseIndex],
                 currentSet: nextSet,
-                // reset counter for the next set
                 totalReps: 0,
             };
-            // if rest configured
             const rest = ex.restSecondsBetweenSets ?? ex.restSeconds ?? null;
             return {
                 exercises: copy,
@@ -371,7 +358,6 @@ export const useSessionRunnerStore = create<SessionRunnerState>((set, get) => ({
         const state = get();
         if (!state.workoutId) return;
 
-        // aggregate totals per workoutExercise by reading created sets
         for (const ex of state.exercises) {
             const sets = await workoutSetRepository.findByWorkoutExerciseId(ex.workoutExerciseId);
             const totalReps = sets.reduce((sum, s) => sum + (s.reps ?? 0), 0);
